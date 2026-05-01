@@ -11,51 +11,70 @@ public class CustomCameraController : MonoBehaviour
     
     [Header("Collision & Smoothing")]
     public LayerMask obstacleLayer; 
-    [Tooltip("Gives the camera thickness so it doesn't snag on sharp corners")]
     public float cameraCollisionRadius = 0.3f; 
     public float positionSmoothTime = 0.05f; 
     public float rotationSmoothSpeed = 10f;
 
     private Vector3 currentVelocity;
     private float currentDistance;
+    
+    private Vector3 smoothedLookDir;
+    private Vector3 smoothedUpDir;
 
     private void Start()
     {
         currentDistance = maxDistance;
+        smoothedLookDir = transform.forward;
+        smoothedUpDir = transform.up;
     }
 
     private void LateUpdate()
     {
         if (player == null) return;
 
-        // 1. Calculate the raw ideal position behind the player
+        // 1. POSITION & COLLISION LOGIC
         Vector3 idealPosition = player.position - (player.forward * maxDistance) + (player.up * height);
         Vector3 focusPoint = player.position + (player.up * 1.5f); 
         
-        // 2. CAMERA COLLISION (SphereCast / Spring Arm)
         Vector3 directionToCamera = (idealPosition - focusPoint).normalized;
         float expectedMaxDistance = (idealPosition - focusPoint).magnitude;
         float targetDistance = expectedMaxDistance;
 
-        // We cast a thick sphere instead of a thin ray to slide on walls cleanly
         if (Physics.SphereCast(focusPoint, cameraCollisionRadius, directionToCamera, out RaycastHit hit, expectedMaxDistance, obstacleLayer))
         {
             targetDistance = hit.distance;
         }
 
-        // Smoothly reel the distance in and out to prevent snapping
         currentDistance = Mathf.Lerp(currentDistance, targetDistance, Time.deltaTime * 15f);
 
-        // 3. Final Position using the smoothed distance
         Vector3 finalPosition = focusPoint + (directionToCamera * currentDistance);
         transform.position = Vector3.SmoothDamp(transform.position, finalPosition, ref currentVelocity, positionSmoothTime);
 
-        // 4. Look at the player smoothly
-        Vector3 lookDirection = focusPoint - transform.position;
-        if (lookDirection != Vector3.zero) 
+        // 2. ANTI-SNAP ROTATION LOGIC
+        Vector3 targetLookDir = (focusPoint - transform.position).normalized;
+        Vector3 targetUpDir = player.up;
+        
+        if (targetLookDir == Vector3.zero) targetLookDir = player.forward;
+
+        // Safeguard against Gimbal Lock (if looking almost directly parallel to the Up axis)
+        if (Mathf.Abs(Vector3.Dot(targetLookDir, targetUpDir)) > 0.98f)
         {
-            Quaternion targetRotation = Quaternion.LookRotation(lookDirection, player.up);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * rotationSmoothSpeed);
+            targetLookDir += player.forward * 0.05f;
+            targetLookDir.Normalize();
         }
+
+        // Initialize vectors safely if they are empty
+        if (smoothedLookDir == Vector3.zero)
+        {
+            smoothedLookDir = transform.forward;
+            smoothedUpDir = transform.up;
+        }
+
+        // Smooth the vectors independently. 
+        // .Slerp and guarantees a clean, twist-free pan.
+        smoothedLookDir = Vector3.Slerp(smoothedLookDir, targetLookDir, Time.deltaTime * rotationSmoothSpeed).normalized;
+        smoothedUpDir = Vector3.Slerp(smoothedUpDir, targetUpDir, Time.deltaTime * rotationSmoothSpeed).normalized;
+
+        transform.rotation = Quaternion.LookRotation(smoothedLookDir, smoothedUpDir);
     }
 }
