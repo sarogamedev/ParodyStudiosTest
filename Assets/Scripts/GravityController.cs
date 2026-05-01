@@ -13,11 +13,15 @@ public class GravityController : MonoBehaviour
     [Tooltip("Increase this if the hologram clips into the floor/walls")]
     public float hologramSurfaceOffset = 0.05f;
 
-    [Tooltip("Pushes the hologram out in front of the player so it doesn't overlap them")]
+    [Tooltip("How far the hologram pushes out based on input direction")]
     public float hologramForwardOffset = 1.5f;
 
     [HideInInspector] public Vector3 currentGravityDir = Vector3.down;
     private Vector3 targetGravityDir = Vector3.down;
+
+    // Remembers the local offset direction based on the arrow key pressed
+    private Vector3 targetLocalOffset = Vector3.forward;
+
     private Rigidbody rb;
     private bool isPreviewing = false;
 
@@ -42,35 +46,51 @@ public class GravityController : MonoBehaviour
     private void HandleGravityInput()
     {
         Vector3 inputDir = Vector3.zero;
-        if (Input.GetKey(KeyCode.UpArrow)) inputDir = mainCamera.forward;
-        else if (Input.GetKey(KeyCode.DownArrow)) inputDir = -mainCamera.forward;
-        else if (Input.GetKey(KeyCode.RightArrow)) inputDir = mainCamera.right;
-        else if (Input.GetKey(KeyCode.LeftArrow)) inputDir = -mainCamera.right;
+
+        // Determine Gravity Direction AND Local Offset Direction
+        if (Input.GetKey(KeyCode.UpArrow))
+        {
+            inputDir = mainCamera.forward;
+            targetLocalOffset = Vector3.forward;
+        }
+        else if (Input.GetKey(KeyCode.DownArrow))
+        {
+            inputDir = -mainCamera.forward;
+            targetLocalOffset = Vector3.forward;
+        }
+        else if (Input.GetKey(KeyCode.RightArrow))
+        {
+            inputDir = mainCamera.right;
+            targetLocalOffset = Vector3.right;
+        }
+        else if (Input.GetKey(KeyCode.LeftArrow))
+        {
+            inputDir = -mainCamera.right;
+            targetLocalOffset = Vector3.left;
+        }
 
         if (inputDir != Vector3.zero)
         {
             targetGravityDir = SnapToAxis(inputDir);
-            Vector3 rayOrigin = transform.position + (transform.up * 0.5f); 
-        
-            // Only trigger if we actually hit a valid wall/floor
+            Vector3 rayOrigin = transform.position + (transform.up * 0.5f);
+
             if (Physics.Raycast(rayOrigin, targetGravityDir, out RaycastHit hit, 50f, groundLayer))
             {
                 isPreviewing = true;
                 if (hologram != null) hologram.SetActive(true);
 
-                Quaternion futureRotation = Quaternion.FromToRotation(transform.up, -targetGravityDir) * transform.rotation;
-                Vector3 futureForward = futureRotation * Vector3.forward;
+                Quaternion exactFutureRotation = Quaternion.FromToRotation(transform.up, -targetGravityDir) * transform.rotation;
+                Vector3 appliedOffsetDir = exactFutureRotation * targetLocalOffset;
 
-                Vector3 targetPosition = hit.point 
-                                         + (hit.normal * hologramSurfaceOffset) 
-                                         + (futureForward * hologramForwardOffset);
+                Vector3 targetPosition = hit.point
+                                         + (hit.normal * hologramSurfaceOffset)
+                                         + (appliedOffsetDir * hologramForwardOffset);
 
                 hologram.transform.position = targetPosition;
-                hologram.transform.rotation = Quaternion.Slerp(hologram.transform.rotation, futureRotation, Time.deltaTime * rotationSpeed);
+                hologram.transform.rotation = Quaternion.Slerp(hologram.transform.rotation, exactFutureRotation, Time.deltaTime * rotationSpeed);
             }
             else
             {
-                // Aiming at the void. Hide hologram and cancel preview.
                 isPreviewing = false;
                 if (hologram != null) hologram.SetActive(false);
             }
@@ -81,9 +101,14 @@ public class GravityController : MonoBehaviour
             if (hologram != null) hologram.SetActive(false);
         }
 
+        // Confirm Gravity Shift & Apply Forward Force
         if (isPreviewing && Input.GetKeyDown(KeyCode.E))
         {
             currentGravityDir = targetGravityDir;
+
+            float forwardPushStrength = 20f;
+            rb.linearVelocity = hologram.transform.forward * forwardPushStrength;
+
             isPreviewing = false;
             if (hologram != null) hologram.SetActive(false);
         }

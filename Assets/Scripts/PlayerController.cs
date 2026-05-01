@@ -83,4 +83,21 @@ public class PlayerController : MonoBehaviour
             anim.SetBool("IsGrounded", isGrounded);
         }
     }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Collectible"))
+        {
+            GameManager.Instance.CollectCube();
+            Destroy(other.gameObject);
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.CompareTag("KillVolume"))
+        {
+            GameManager.Instance.TriggerGameOver(false);
+        }
+    }
 }
