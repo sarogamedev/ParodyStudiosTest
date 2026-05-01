@@ -25,8 +25,6 @@ public class GameManager : MonoBehaviour
 
     private void Start()
     {
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
         timeRemaining = timeLimit;
         totalCubes = GameObject.FindGameObjectsWithTag("Collectible").Length;
         if (feedBackText != null) feedBackText.gameObject.SetActive(false);
@@ -73,5 +71,11 @@ public class GameManager : MonoBehaviour
             int seconds = Mathf.FloorToInt(timeRemaining % 60);
             timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
         }
+    }
+    
+    public void RestartGame()
+    {
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 }
